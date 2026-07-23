@@ -50,7 +50,17 @@ async function createOrder(prefill: CheckoutPrefill): Promise<CreatedOrder> {
     body: JSON.stringify(prefill),
   });
 
-  const data = (await response.json()) as CreatedOrder & { error?: string };
+  const text = await response.text();
+  let data: CreatedOrder & { error?: string };
+  try {
+    data = JSON.parse(text) as CreatedOrder & { error?: string };
+  } catch {
+    throw new Error(
+      text.trim().slice(0, 180) ||
+        `Payment server error (${response.status}). Redeploy after fixing API.`,
+    );
+  }
+
   if (!response.ok || !data.orderId) {
     throw new Error(data.error || "Could not create payment order.");
   }
@@ -77,8 +87,13 @@ async function verifyPayment(
       razorpay_signature: response.razorpay_signature,
     }),
   });
-  const data = (await res.json()) as { verified?: boolean };
-  return !!data.verified;
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as { verified?: boolean };
+    return !!data.verified;
+  } catch {
+    return false;
+  }
 }
 
 export async function openRazorpayCheckout(
