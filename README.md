@@ -57,6 +57,8 @@ In **Vercel → Project → Settings → Environment Variables**, add for Produc
 
 Then **Redeploy** so the frontend build picks up `VITE_*` values.
 
+**Hobby plan note:** If the GitHub repo is **private**, Vercel Hobby only deploys commits from the project owner. Make the repo **public**, or upgrade to Pro, or push as the Vercel account owner.
+
 You do **not** need a separate Render server.
 
 ### 4. Workshop content
