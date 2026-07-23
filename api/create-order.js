@@ -1,7 +1,4 @@
-import { createHmac } from "node:crypto";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-
-function authHeader(keyId: string, keySecret: string) {
+function authHeader(keyId, keySecret) {
   return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
 }
 
@@ -26,18 +23,15 @@ function readCredentials() {
   return { keyId, keySecret, amountInr };
 }
 
-function parseBody(req: VercelRequest): Record<string, string> {
+function parseBody(req) {
   if (!req.body) return {};
   if (typeof req.body === "string") {
-    return JSON.parse(req.body) as Record<string, string>;
+    return JSON.parse(req.body);
   }
-  return req.body as Record<string, string>;
+  return req.body;
 }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
-) {
+export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   if (req.method !== "POST") {
@@ -68,15 +62,10 @@ export default async function handler(
       }),
     });
 
-    const data = (await response.json()) as {
-      id?: string;
-      amount?: number;
-      currency?: string;
-      error?: { description?: string };
-    };
+    const data = await response.json();
 
     if (!response.ok || !data.id) {
-      const description = data.error?.description || "";
+      const description = data?.error?.description || "";
       if (
         response.status === 401 ||
         /authentication failed/i.test(description)
@@ -97,6 +86,7 @@ export default async function handler(
       keyId,
     });
   } catch (error) {
+    console.error("create-order failed:", error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Could not create order",
     });

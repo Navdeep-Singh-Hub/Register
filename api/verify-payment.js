@@ -1,30 +1,14 @@
 import { createHmac } from "node:crypto";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-function parseBody(req: VercelRequest): {
-  razorpay_order_id?: string;
-  razorpay_payment_id?: string;
-  razorpay_signature?: string;
-} {
+function parseBody(req) {
   if (!req.body) return {};
   if (typeof req.body === "string") {
-    return JSON.parse(req.body) as {
-      razorpay_order_id?: string;
-      razorpay_payment_id?: string;
-      razorpay_signature?: string;
-    };
+    return JSON.parse(req.body);
   }
-  return req.body as {
-    razorpay_order_id?: string;
-    razorpay_payment_id?: string;
-    razorpay_signature?: string;
-  };
+  return req.body;
 }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
-) {
+export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   if (req.method !== "POST") {
@@ -54,6 +38,7 @@ export default async function handler(
       error: ok ? undefined : "Payment signature verification failed",
     });
   } catch (error) {
+    console.error("verify-payment failed:", error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Verification failed",
     });
