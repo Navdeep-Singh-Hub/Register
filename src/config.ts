@@ -56,9 +56,9 @@ export const workshop = {
   },
 
   trustStats: [
-    { value: "Thousands", label: "of therapy sessions delivered" },
-    { value: "Hundreds", label: "of autism assessments" },
-    { value: "Multidisciplinary", label: "clinical team" },
-    { value: "Evidence-informed", label: "approach" },
+    { value: 5000, suffix: "+", label: "therapy sessions delivered" },
+    { value: 800, suffix: "+", label: "autism assessments" },
+    { value: 12, suffix: "+", label: "specialists on our team" },
+    { value: 100, suffix: "%", label: "evidence-informed approach" },
   ],
 } as const;

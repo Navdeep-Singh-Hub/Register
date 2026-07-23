@@ -4,9 +4,21 @@ import {
   useState,
   type ComponentProps,
   type FormEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { AnimatePresence, motion, type Variants } from "framer-motion";
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useInView,
+  useMotionValue,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+  type Variants,
+} from "framer-motion";
 import { workshop } from "../config";
 import { useCountdown } from "../hooks/useCountdown";
 import { openRazorpayCheckout } from "../lib/razorpay";
@@ -34,6 +46,10 @@ import {
   IconXCircle,
 } from "./Icons";
 
+/* ------------------------------------------------------------------ */
+/* Content                                                             */
+/* ------------------------------------------------------------------ */
+
 const struggleItems = [
   "Speech progress is very slow",
   "Hyperactivity continues despite therapy",
@@ -49,10 +65,7 @@ const learnItems = [
   { icon: IconBrain, text: "Why some children improve faster than others" },
   { icon: IconUtensils, text: "Understanding nutrition and autism" },
   { icon: IconMicrobe, text: "Gut health and behaviour" },
-  {
-    icon: IconPill,
-    text: "Which supplements have evidence—and which don’t",
-  },
+  { icon: IconPill, text: "Which supplements have evidence—and which don’t" },
   { icon: IconStethoscope, text: "When biomedical evaluation may be useful" },
   { icon: IconFlask, text: "What tests are sometimes recommended" },
   { icon: IconMoon, text: "Sleep and brain development" },
@@ -125,19 +138,29 @@ const testimonials = [
   },
 ];
 
+/* ------------------------------------------------------------------ */
+/* Motion primitives                                                   */
+/* ------------------------------------------------------------------ */
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 28 },
+  hidden: { opacity: 0, y: 34, filter: "blur(6px)" },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+    filter: "blur(0px)",
+    transition: { duration: 0.7, ease: EASE },
+    // Remove the residual filter so gradient text (background-clip: text)
+    // inside revealed sections keeps painting in Chromium.
+    transitionEnd: { filter: "none" },
   },
 };
 
 const stagger: Variants = {
   hidden: {},
   show: {
-    transition: { staggerChildren: 0.08, delayChildren: 0.05 },
+    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
   },
 };
 
@@ -152,7 +175,7 @@ function RevealSection({
       variants={fadeUp}
       initial="hidden"
       whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.18 }}
       {...rest}
     >
       {children}
@@ -173,12 +196,116 @@ function RevealGrid({
       variants={stagger}
       initial="hidden"
       whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.15 }}
     >
       {children}
     </motion.div>
   );
 }
+
+/** Fixed gradient bar showing page scroll progress. */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 140,
+    damping: 26,
+    mass: 0.4,
+  });
+  return <motion.div className="scroll-progress" style={{ scaleX }} aria-hidden />;
+}
+
+/** Wrapper that makes its child gently follow the cursor. */
+function Magnetic({
+  children,
+  strength = 0.28,
+}: {
+  children: ReactNode;
+  strength?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const sx = useSpring(x, { stiffness: 180, damping: 16, mass: 0.4 });
+  const sy = useSpring(y, { stiffness: 180, damping: 16, mass: 0.4 });
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (reduceMotion || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    x.set((event.clientX - rect.left - rect.width / 2) * strength);
+    y.set((event.clientY - rect.top - rect.height / 2) * strength);
+  }
+
+  function onPointerLeave() {
+    x.set(0);
+    y.set(0);
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      className="magnetic"
+      style={{ x: sx, y: sy }}
+      onPointerMove={onPointerMove}
+      onPointerLeave={onPointerLeave}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Headline that reveals word by word; accent words get a gradient. */
+function AnimatedHeadline({ text }: { text: string }) {
+  const accents = new Set(["still", "not", "improving"]);
+  const words = text.split(" ");
+  return (
+    <h1 aria-label={text}>
+      {words.map((word, i) => {
+        const isAccent = accents.has(word.toLowerCase().replace(/[?!.,]/g, ""));
+        return (
+          <motion.span
+            key={`${word}-${i}`}
+            className={`headline-word ${isAccent ? "accent" : ""}`}
+            initial={{ opacity: 0, y: "0.6em", rotateX: -40, filter: "blur(6px)" }}
+            animate={{ opacity: 1, y: 0, rotateX: 0, filter: "blur(0px)" }}
+            transition={{ duration: 0.7, delay: 0.15 + i * 0.055, ease: EASE }}
+          >
+            {word}
+            {i < words.length - 1 ? "\u00A0" : ""}
+          </motion.span>
+        );
+      })}
+    </h1>
+  );
+}
+
+/** Counts up from 0 when scrolled into view. */
+function CountUp({ value, suffix = "" }: { value: number; suffix?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-60px" });
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    if (!inView) return;
+    const controls = animate(0, value, {
+      duration: 1.9,
+      ease: EASE,
+      onUpdate: (latest) => setDisplay(Math.round(latest)),
+    });
+    return () => controls.stop();
+  }, [inView, value]);
+
+  return (
+    <span ref={ref}>
+      {display.toLocaleString("en-IN")}
+      {suffix}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page pieces                                                         */
+/* ------------------------------------------------------------------ */
 
 function scrollToPricing() {
   document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" });
@@ -243,42 +370,40 @@ function Countdown() {
 
   return (
     <div className="countdown" aria-label="Registration closes in">
-      {units.map((unit) => (
-        <div className="countdown-unit" key={unit.label}>
-          <strong>
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span
-                key={unit.value}
-                initial={{ y: -14, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 14, opacity: 0 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                style={{ display: "inline-block" }}
-              >
-                {String(unit.value).padStart(2, "0")}
-              </motion.span>
-            </AnimatePresence>
-          </strong>
-          <span>{unit.label}</span>
-        </div>
-      ))}
+      <span className="countdown-label">Registration closes in</span>
+      <div className="countdown-units">
+        {units.map((unit) => (
+          <div className="countdown-unit" key={unit.label}>
+            <strong>
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.span
+                  key={unit.value}
+                  initial={{ y: -16, opacity: 0, filter: "blur(4px)" }}
+                  animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
+                  exit={{ y: 16, opacity: 0, filter: "blur(4px)" }}
+                  transition={{ duration: 0.3, ease: EASE }}
+                  style={{ display: "inline-block" }}
+                >
+                  {String(unit.value).padStart(2, "0")}
+                </motion.span>
+              </AnimatePresence>
+            </strong>
+            <span>{unit.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function Testimonials() {
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  function scrollByCard(direction: -1 | 1) {
-    const track = trackRef.current;
-    if (!track) return;
-    const card = track.querySelector(".testimonial-card");
-    const amount = card ? card.clientWidth + 16 : 280;
-    track.scrollBy({ left: direction * amount, behavior: "smooth" });
-  }
-
+/** Infinite auto-scrolling testimonial marquee; pauses on hover. */
+function TestimonialMarquee() {
+  const doubled = [...testimonials, ...testimonials];
   return (
-    <RevealSection className="section testimonials" aria-labelledby="testimonials-heading">
+    <RevealSection
+      className="section testimonials"
+      aria-labelledby="testimonials-heading"
+    >
       <div className="container">
         <div className="section-head">
           <p className="eyebrow">Parent voices</p>
@@ -288,47 +413,64 @@ function Testimonials() {
             conversations with doctors—not cures.
           </p>
         </div>
-        <motion.div
-          className="testimonial-track"
-          ref={trackRef}
-          variants={stagger}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.2 }}
-        >
-          {testimonials.map((item) => (
-            <motion.div className="testimonial-card-wrap" variants={fadeUp} key={item.name}>
-              <TiltCard className="testimonial-card">
-                <div className="stars" aria-label="5 stars">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <IconStar key={i} />
-                  ))}
-                </div>
-                <blockquote>“{item.quote}”</blockquote>
-                <cite>{item.name}</cite>
-              </TiltCard>
-            </motion.div>
+      </div>
+      <div className="marquee" aria-label="Parent testimonials">
+        <div className="marquee-track">
+          {doubled.map((item, i) => (
+            <figure
+              className="testimonial-card"
+              key={`${item.name}-${i}`}
+              aria-hidden={i >= testimonials.length}
+            >
+              <div className="stars" aria-label="5 stars">
+                {Array.from({ length: 5 }).map((_, s) => (
+                  <IconStar key={s} />
+                ))}
+              </div>
+              <blockquote>“{item.quote}”</blockquote>
+              <figcaption>{item.name}</figcaption>
+            </figure>
           ))}
-        </motion.div>
-        <div className="carousel-nav">
-          <button
-            type="button"
-            className="prev"
-            aria-label="Previous testimonial"
-            onClick={() => scrollByCard(-1)}
-          >
-            <IconChevron />
-          </button>
-          <button
-            type="button"
-            aria-label="Next testimonial"
-            onClick={() => scrollByCard(1)}
-          >
-            <IconChevron />
-          </button>
         </div>
       </div>
     </RevealSection>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <motion.div className={`faq-item ${open ? "open" : ""}`} variants={fadeUp}>
+      <button
+        type="button"
+        className="faq-question"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{q}</span>
+        <motion.span
+          className="faq-icon"
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={{ duration: 0.3, ease: EASE }}
+        >
+          <IconChevron />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="answer"
+            className="faq-answer"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.38, ease: EASE }}
+          >
+            <p>{a}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -363,11 +505,7 @@ function PricingForm({ onPaid }: { onPaid: (paymentId: string) => void }) {
     try {
       setLoading(true);
       await openRazorpayCheckout(
-        {
-          name: trimmedName,
-          contact: trimmedMobile,
-          email: trimmedEmail,
-        },
+        { name: trimmedName, contact: trimmedMobile, email: trimmedEmail },
         onPaid,
         (message) => setError(message),
       );
@@ -381,89 +519,101 @@ function PricingForm({ onPaid }: { onPaid: (paymentId: string) => void }) {
   }
 
   return (
-    <RevealSection className="section pricing" id="pricing" aria-labelledby="pricing-heading">
+    <RevealSection
+      className="section pricing"
+      id="pricing"
+      aria-labelledby="pricing-heading"
+    >
       <div className="container">
-        <div className="section-head">
+        <div className="section-head centered">
           <p className="eyebrow">Workshop fee</p>
           <h2 id="pricing-heading">Reserve Your Seat</h2>
           <p>Secure your place in this focused 2-hour parent workshop.</p>
         </div>
 
         <div className="pricing-box">
-          <div className="price-row">
-            <span className="amount">{workshop.feeDisplay}</span>
-            <span className="note">per registration</span>
-          </div>
+          <div className="pricing-inner">
+            <div className="price-row">
+              <span className="amount">{workshop.feeDisplay}</span>
+              <span className="note">per registration</span>
+            </div>
 
-          <p style={{ fontWeight: 600, marginBottom: "0.85rem" }}>
-            What’s included
-          </p>
-          <ul className="check-list">
-            {[
-              "2-hour live workshop",
-              "Q&A session",
-              "Parent resource material",
-              "Biomedical checklist",
-            ].map((item) => (
-              <li key={item}>
-                <span className="icon-wrap">
-                  <IconCheck />
-                </span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+            <p style={{ fontWeight: 600, marginBottom: "0.85rem" }}>
+              What’s included
+            </p>
+            <ul className="check-list">
+              {[
+                "2-hour live workshop",
+                "Q&A session",
+                "Parent resource material",
+                "Biomedical checklist",
+              ].map((item) => (
+                <li key={item}>
+                  <span className="icon-wrap">
+                    <IconCheck />
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
 
-          <form className="checkout-form" onSubmit={handleSubmit} noValidate>
-            <label>
-              Parent Name
-              <input
-                name="parentName"
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Full name"
-              />
-            </label>
-            <label>
-              Mobile Number
-              <input
-                name="mobile"
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel"
-                value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
-                placeholder="10-digit mobile"
-              />
-            </label>
-            <label>
-              Email Address
-              <input
-                name="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
-            {error ? <p className="form-error">{error}</p> : null}
-            <button className="btn btn-primary btn-large" type="submit" disabled={loading}>
-              {loading ? "Opening checkout…" : "Reserve My Seat"}
-            </button>
-          </form>
+            <form className="checkout-form" onSubmit={handleSubmit} noValidate>
+              <label>
+                Parent Name
+                <input
+                  name="parentName"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Full name"
+                />
+              </label>
+              <label>
+                Mobile Number
+                <input
+                  name="mobile"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  placeholder="10-digit mobile"
+                />
+              </label>
+              <label>
+                Email Address
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+              {error ? <p className="form-error">{error}</p> : null}
+              <Magnetic strength={0.18}>
+                <button
+                  className="btn btn-primary btn-large"
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading ? "Opening checkout…" : "Reserve My Seat"}
+                </button>
+              </Magnetic>
+            </form>
 
-          <div className="trust-badges">
-            <span>
-              <IconLock /> Secure Razorpay payment
-            </span>
-            <span>
-              <IconMessage /> WhatsApp & email confirmation
-            </span>
-            <span>
-              <IconUsers /> Limited seats
-            </span>
+            <div className="trust-badges">
+              <span>
+                <IconLock /> Secure Razorpay payment
+              </span>
+              <span>
+                <IconMessage /> WhatsApp & email confirmation
+              </span>
+              <span>
+                <IconUsers /> Limited seats
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -471,12 +621,25 @@ function PricingForm({ onPaid }: { onPaid: (paymentId: string) => void }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
 export function LandingPage({
   onPaid,
 }: {
   onPaid: (paymentId: string) => void;
 }) {
   const [showSticky, setShowSticky] = useState(false);
+  const heroRef = useRef<HTMLElement>(null);
+
+  const { scrollYProgress: heroProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
+  const copyY = useTransform(heroProgress, [0, 1], [0, 90]);
+  const copyOpacity = useTransform(heroProgress, [0, 0.85], [1, 0.15]);
+  const visualY = useTransform(heroProgress, [0, 1], [0, 150]);
 
   useEffect(() => {
     const pricing = document.getElementById("pricing");
@@ -501,19 +664,50 @@ export function LandingPage({
 
   return (
     <>
-      <header className="hero">
+      <ScrollProgress />
+
+      <header className="hero" ref={heroRef}>
         <div className="hero-media" aria-hidden />
+        <div className="hero-aurora" aria-hidden>
+          <span className="blob b1" />
+          <span className="blob b2" />
+          <span className="blob b3" />
+        </div>
+        <div className="hero-grain" aria-hidden />
+
         <div className="hero-content">
           <div className="container hero-grid">
-            <div className="hero-copy">
-              <p className="brand-mark">
+            <motion.div
+              className="hero-copy"
+              style={{ y: copyY, opacity: copyOpacity }}
+            >
+              <motion.p
+                className="brand-mark"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: EASE }}
+              >
                 <span>Parent Workshop</span>
                 {workshop.brand}
-              </p>
-              <h1>{workshop.headline}</h1>
-              <p className="hero-sub">{workshop.subheadline}</p>
+              </motion.p>
 
-              <div className="hero-experts">
+              <AnimatedHeadline text={workshop.headline} />
+
+              <motion.p
+                className="hero-sub"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.55, ease: EASE }}
+              >
+                {workshop.subheadline}
+              </motion.p>
+
+              <motion.div
+                className="hero-experts"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.65, ease: EASE }}
+              >
                 <ExpertAvatar name={workshop.experts.priyanka.name} />
                 <ExpertAvatar
                   name={workshop.experts.neha.name}
@@ -523,51 +717,70 @@ export function LandingPage({
                   With {workshop.experts.priyanka.name} &{" "}
                   {workshop.experts.neha.name}
                 </p>
-              </div>
+              </motion.div>
 
-              <div className="hero-meta">
-                <div className="meta-chip">
-                  <IconCalendar />
-                  <div>
-                    <strong>Date</strong>
-                    <span>{workshop.date}</span>
-                  </div>
-                </div>
-                <div className="meta-chip">
-                  <IconClock />
-                  <div>
-                    <strong>Time</strong>
-                    <span>
-                      {workshop.time} ({workshop.duration})
-                    </span>
-                  </div>
-                </div>
-                <div className="meta-chip">
-                  <IconMapPin />
-                  <div>
-                    <strong>Venue</strong>
-                    <span>{workshop.venue}</span>
-                  </div>
-                </div>
-                <div className="meta-chip">
-                  <IconUsers />
-                  <div>
-                    <strong>Seats</strong>
-                    <span>
-                      {workshop.seatsRemaining} of {workshop.seatsTotal} left
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <motion.div
+                className="hero-meta"
+                initial="hidden"
+                animate="show"
+                variants={{
+                  hidden: {},
+                  show: {
+                    transition: { staggerChildren: 0.08, delayChildren: 0.72 },
+                  },
+                }}
+              >
+                {[
+                  { Icon: IconCalendar, label: "Date", value: workshop.date },
+                  {
+                    Icon: IconClock,
+                    label: "Time",
+                    value: `${workshop.time} (${workshop.duration})`,
+                  },
+                  { Icon: IconMapPin, label: "Venue", value: workshop.venue },
+                  {
+                    Icon: IconUsers,
+                    label: "Seats",
+                    value: `${workshop.seatsRemaining} of ${workshop.seatsTotal} left`,
+                  },
+                ].map(({ Icon, label, value }) => (
+                  <motion.div
+                    className="meta-chip"
+                    key={label}
+                    variants={{
+                      hidden: { opacity: 0, y: 18, scale: 0.96 },
+                      show: {
+                        opacity: 1,
+                        y: 0,
+                        scale: 1,
+                        transition: { duration: 0.55, ease: EASE },
+                      },
+                    }}
+                  >
+                    <Icon />
+                    <div>
+                      <strong>{label}</strong>
+                      <span>{value}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
 
-              <div className="hero-cta">
-                <button
-                  type="button"
-                  className="btn btn-primary btn-large"
-                  onClick={scrollToPricing}
-                >
-                  Reserve My Seat
-                </button>
+              <motion.div
+                className="hero-cta"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 1.05, ease: EASE }}
+              >
+                <Magnetic>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-large"
+                    onClick={scrollToPricing}
+                  >
+                    Reserve My Seat
+                  </button>
+                </Magnetic>
                 <div className="hero-trust">
                   <span>
                     <IconShield /> Evidence-informed
@@ -576,15 +789,33 @@ export function LandingPage({
                     <IconLock /> Secure payment
                   </span>
                 </div>
-              </div>
-              <Countdown />
-            </div>
+              </motion.div>
 
-            <div className="hero-visual">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.8, delay: 1.2 }}
+              >
+                <Countdown />
+              </motion.div>
+            </motion.div>
+
+            <motion.div className="hero-visual" style={{ y: visualY }}>
               <HeroOrbitScene />
-            </div>
+            </motion.div>
           </div>
         </div>
+
+        <motion.div
+          className="scroll-hint"
+          aria-hidden
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.8, duration: 0.8 }}
+        >
+          <span className="scroll-hint-dot" />
+        </motion.div>
+
         <div className="hero-wave" aria-hidden>
           <svg viewBox="0 0 1440 90" preserveAspectRatio="none">
             <path
@@ -612,9 +843,15 @@ export function LandingPage({
                 </motion.div>
               ))}
             </RevealGrid>
-            <p className="struggle-bottom">
+            <motion.p
+              className="struggle-bottom"
+              initial={{ opacity: 0, scale: 0.96 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.5 }}
+              transition={{ duration: 0.6, ease: EASE, delay: 0.2 }}
+            >
               If you answered “Yes” to even one, this workshop is for you.
-            </p>
+            </motion.p>
           </div>
         </RevealSection>
 
@@ -687,10 +924,18 @@ export function LandingPage({
               <h2 id="trust-heading">Care Built on Experience</h2>
             </div>
             <div className="trust-band">
+              <span className="trust-orb o1" aria-hidden />
+              <span className="trust-orb o2" aria-hidden />
               <RevealGrid className="trust-grid">
                 {workshop.trustStats.map((stat) => (
-                  <motion.div className="trust-item" key={stat.label} variants={fadeUp}>
-                    <strong>{stat.value}</strong>
+                  <motion.div
+                    className="trust-item"
+                    key={stat.label}
+                    variants={fadeUp}
+                  >
+                    <strong>
+                      <CountUp value={stat.value} suffix={stat.suffix} />
+                    </strong>
                     <span>{stat.label}</span>
                   </motion.div>
                 ))}
@@ -699,7 +944,7 @@ export function LandingPage({
           </div>
         </RevealSection>
 
-        <Testimonials />
+        <TestimonialMarquee />
 
         <RevealSection className="section" aria-labelledby="who-heading">
           <div className="container">
@@ -744,13 +989,7 @@ export function LandingPage({
             </div>
             <RevealGrid className="faq-list">
               {faqs.map((faq) => (
-                <motion.details className="faq-item" key={faq.q} variants={fadeUp}>
-                  <summary>
-                    {faq.q}
-                    <IconChevron />
-                  </summary>
-                  <p>{faq.a}</p>
-                </motion.details>
+                <FaqItem key={faq.q} q={faq.q} a={faq.a} />
               ))}
             </RevealGrid>
           </div>
@@ -766,25 +1005,40 @@ export function LandingPage({
         </div>
       </footer>
 
-      <a
+      <motion.a
         className="whatsapp-float"
         href={whatsappHref}
         target="_blank"
         rel="noreferrer"
         aria-label="Ask a workshop question on WhatsApp"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 1.4, type: "spring", stiffness: 260, damping: 18 }}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.94 }}
       >
         <IconWhatsApp />
-      </a>
+      </motion.a>
 
-      <div className={`sticky-cta ${showSticky ? "visible" : ""}`}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={scrollToPricing}
-        >
-          Reserve My Seat
-        </button>
-      </div>
+      <AnimatePresence>
+        {showSticky && (
+          <motion.div
+            className="sticky-cta"
+            initial={{ y: 90, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 90, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 30 }}
+          >
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={scrollToPricing}
+            >
+              Reserve My Seat — {workshop.feeDisplay}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
