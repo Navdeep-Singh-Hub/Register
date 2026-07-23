@@ -39,7 +39,27 @@ If checkout shows **Authentication failed**, the Key ID and Secret do not match 
 
 `RAZORPAY_PLAN_ID` is for subscriptions and is not used by this one-time workshop checkout.
 
-### 2. Workshop content
+### 3. Deploy on Vercel (payments)
+
+Local `npm run dev` uses the Vite API plugin. Production uses Vercel serverless functions:
+
+- `api/create-order.ts` → `POST /api/create-order`
+- `api/verify-payment.ts` → `POST /api/verify-payment`
+
+In **Vercel → Project → Settings → Environment Variables**, add for Production (and Preview if you test there):
+
+| Name | Notes |
+|------|--------|
+| `VITE_RAZORPAY_KEY_ID` | Public Key Id (`rzp_live_…` or `rzp_test_…`) |
+| `RAZORPAY_KEY_SECRET` | Secret — never expose to the browser |
+| `WORKSHOP_FEE_INR` | e.g. `1499` |
+| `VITE_META_PIXEL_ID` | Optional |
+
+Then **Redeploy** so the frontend build picks up `VITE_*` values.
+
+You do **not** need a separate Render server.
+
+### 4. Workshop content
 
 Edit `src/config.ts`:
 
