@@ -133,6 +133,8 @@ export async function openRazorpayCheckout(
     notes: {
       workshop: "biomedical-parent-workshop",
       parent_name: prefill.name,
+      parent_email: prefill.email,
+      parent_mobile: prefill.contact,
     },
     theme: { color: "#0F6B5C" },
     async handler(response) {

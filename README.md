@@ -43,8 +43,10 @@ If checkout shows **Authentication failed**, the Key ID and Secret do not match 
 
 Local `npm run dev` uses the Vite API plugin. Production uses Vercel serverless functions:
 
-- `api/create-order.ts` → `POST /api/create-order`
-- `api/verify-payment.ts` → `POST /api/verify-payment`
+- `api/create-order.js` → `POST /api/create-order`
+- `api/verify-payment.js` → `POST /api/verify-payment`
+- `api/admin/login.js` → `POST /api/admin/login`
+- `api/admin/registrations.js` → `GET /api/admin/registrations`
 
 In **Vercel → Project → Settings → Environment Variables**, add for Production (and Preview if you test there):
 
@@ -53,6 +55,8 @@ In **Vercel → Project → Settings → Environment Variables**, add for Produc
 | `VITE_RAZORPAY_KEY_ID` | Public Key Id (`rzp_live_…` or `rzp_test_…`) |
 | `RAZORPAY_KEY_SECRET` | Secret — never expose to the browser |
 | `WORKSHOP_FEE_INR` | e.g. `1499` |
+| `ADMIN_PASSWORD` | Password for `/admin` |
+| `ADMIN_SECRET` | Optional token signing secret |
 | `VITE_META_PIXEL_ID` | Optional |
 
 Then **Redeploy** so the frontend build picks up `VITE_*` values.
@@ -61,7 +65,17 @@ Then **Redeploy** so the frontend build picks up `VITE_*` values.
 
 You do **not** need a separate Render server.
 
-### 4. Workshop content
+### 4. Admin panel (`/admin`)
+
+View parents who reserved seats (name, mobile, email, amount, payment id).
+
+1. Set `ADMIN_PASSWORD` in `.env` / Vercel env
+2. Open `https://your-site.vercel.app/admin`
+3. Sign in · search · export CSV
+
+Registrations come from **Razorpay captured/authorized payments** (checkout notes).
+
+### 5. Workshop content
 
 Edit `src/config.ts`:
 
@@ -80,6 +94,7 @@ Replace avatar placeholders with real photos of Dr. Priyanka Kalra and Dr. Neha 
 - Remaining seats display
 - Floating WhatsApp button
 - Razorpay Checkout (parent name, mobile, email)
+- Admin panel for seat reservations (`/admin`)
 - Success screen with WhatsApp group join CTA
 - Meta Pixel: PageView, ViewContent, InitiateCheckout, Purchase
 

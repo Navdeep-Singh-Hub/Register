@@ -5,6 +5,14 @@ import {
   verifyPaymentSignature,
   type RazorpayEnv,
 } from "./razorpayCore.ts";
+import {
+  bearerToken,
+  createAdminToken,
+  fetchWorkshopRegistrations,
+  getAdminPassword,
+  passwordsMatch,
+  verifyAdminToken,
+} from "../api/_lib/admin.js";
 
 function json(
   res: ServerResponse,
@@ -25,7 +33,17 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function attachApi(middlewares: Connect.Server, env: RazorpayEnv) {
+function applyEnv(env: Record<string, string>) {
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+function attachApi(middlewares: Connect.Server, env: RazorpayEnv & Record<string, string>) {
+  applyEnv(env as Record<string, string>);
+
   middlewares.use(async (req, res, next) => {
     const url = req.url?.split("?")[0];
 
@@ -77,6 +95,60 @@ function attachApi(middlewares: Connect.Server, env: RazorpayEnv) {
       } catch (error) {
         json(res, 500, {
           error: error instanceof Error ? error.message : "Verification failed",
+        });
+      }
+      return;
+    }
+
+    if (url === "/api/admin/login" && req.method === "POST") {
+      try {
+        const expected = getAdminPassword();
+        if (!expected) {
+          json(res, 500, {
+            error:
+              "ADMIN_PASSWORD is not set. Add it to .env, then restart npm run dev.",
+          });
+          return;
+        }
+        const raw = await readBody(req);
+        const body = raw ? (JSON.parse(raw) as { password?: string }) : {};
+        if (!passwordsMatch(String(body.password || ""), expected)) {
+          json(res, 401, { error: "Incorrect password." });
+          return;
+        }
+        json(res, 200, { token: createAdminToken(), expiresInDays: 7 });
+      } catch (error) {
+        json(res, 500, {
+          error: error instanceof Error ? error.message : "Login failed",
+        });
+      }
+      return;
+    }
+
+    if (url === "/api/admin/registrations" && req.method === "GET") {
+      try {
+        const token = bearerToken(req);
+        if (!verifyAdminToken(token)) {
+          json(res, 401, { error: "Unauthorized. Please sign in again." });
+          return;
+        }
+        const registrations = await fetchWorkshopRegistrations();
+        const revenue = registrations.reduce(
+          (sum: number, r: { amountInr?: number }) => sum + (r.amountInr || 0),
+          0,
+        );
+        json(res, 200, {
+          count: registrations.length,
+          revenue,
+          registrations,
+          fetchedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        json(res, 500, {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not load registrations",
         });
       }
       return;

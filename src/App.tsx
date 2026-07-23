@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AdminPage } from "./components/AdminPage";
 import { LandingPage } from "./components/LandingPage";
 import { SuccessPage } from "./components/SuccessPage";
 import { workshop } from "./config";
@@ -20,7 +22,7 @@ function initMetaPixel() {
   document.head.appendChild(script);
 }
 
-export default function App() {
+function WorkshopApp() {
   const [paid, setPaid] = useState(false);
 
   useEffect(() => {
@@ -45,5 +47,17 @@ export default function App() {
         setPaid(true);
       }}
     />
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<WorkshopApp />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
