@@ -2123,6 +2123,11 @@ body.has-sticky-cta {
   color: #ffe08a;
 }
 
+.admin-pill.failed {
+  background: rgba(238, 108, 77, 0.22);
+  color: #ffb39a;
+}
+
 .admin-empty {
   padding: 2.5rem 1rem;
   text-align: center;

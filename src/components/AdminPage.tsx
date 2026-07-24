@@ -19,6 +19,7 @@ export type Registration = {
 
 type RegistrationsResponse = {
   count: number;
+  failedCount?: number;
   revenue: number;
   registrations: Registration[];
   fetchedAt: string;
@@ -152,11 +153,24 @@ function AdminDashboard({
   async function load() {
     setLoading(true);
     setError("");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
     try {
       const res = await fetch("/api/admin/registrations", {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
-      const json = (await res.json()) as RegistrationsResponse;
+      const text = await res.text();
+      let json: RegistrationsResponse;
+      try {
+        json = JSON.parse(text) as RegistrationsResponse;
+      } catch {
+        throw new Error(
+          res.ok
+            ? "Unexpected response from server."
+            : `Could not load registrations (${res.status}).`,
+        );
+      }
       if (!res.ok) {
         if (res.status === 401) {
           onLogout();
@@ -166,8 +180,15 @@ function AdminDashboard({
       }
       setData(json);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Load failed");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError(
+          "Timed out loading from Razorpay. Tap Refresh — if it keeps failing, check Vercel function logs.",
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Load failed");
+      }
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   }
@@ -262,8 +283,8 @@ function AdminDashboard({
           delay={0.12}
         />
         <StatCard
-          label="Showing now"
-          value={loading ? "…" : String(filtered.length)}
+          label="Failed attempts"
+          value={loading ? "…" : String(data?.failedCount ?? 0)}
           delay={0.19}
         />
       </section>
@@ -273,7 +294,7 @@ function AdminDashboard({
           <div>
             <h2>Parent details</h2>
             <p>
-              Pulled from Razorpay payments for this workshop
+              Razorpay workshop payments (captured + failed attempts)
               {data?.fetchedAt ? ` · updated ${formatDate(data.fetchedAt)}` : ""}
             </p>
           </div>
@@ -306,8 +327,9 @@ function AdminDashboard({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                No registrations found yet. After a successful payment, the parent
-                appears here automatically.
+                No successful registrations yet. Failed payment attempts still
+                appear below after Refresh — only “captured” payments reserve a
+                seat.
               </motion.div>
             ) : (
               <motion.table

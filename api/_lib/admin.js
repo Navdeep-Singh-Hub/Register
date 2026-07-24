@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const WORKSHOP_NOTE = "biomedical-parent-workshop";
+const WORKSHOP_AMOUNTS_PAISE = new Set([49900, 149900]);
 
 export function workshopNote() {
   return WORKSHOP_NOTE;
@@ -88,20 +89,53 @@ export function bearerToken(req) {
   return token.trim();
 }
 
+function normalizeNotes(raw) {
+  if (!raw || Array.isArray(raw) || typeof raw !== "object") return {};
+  return raw;
+}
+
+function looksLikeWorkshop(payment, notes) {
+  if (notes.workshop === WORKSHOP_NOTE) return true;
+  if (notes.parent_name && WORKSHOP_AMOUNTS_PAISE.has(Number(payment.amount))) {
+    return true;
+  }
+  const desc = String(payment.description || "");
+  return /biomedical|parent biomedical workshop/i.test(desc);
+}
+
+async function mapPool(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next;
+      next += 1;
+      results[i] = await mapper(items[i], i);
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(concurrency, Math.max(items.length, 1)) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 /**
  * @param {{ strict?: boolean }} [options]
- * When strict is true, only payments with notes.workshop matching this event count
- * (used for the public seat counter so unrelated payments don't eat seats).
+ * strict: only captured/authorized with notes.workshop (seat counter)
+ * default: workshop payments including failed attempts (admin list)
  */
 export async function fetchWorkshopRegistrations(options = {}) {
   const strict = options.strict === true;
   const { header } = razorpayAuthHeader();
-  const registrations = [];
+  const candidates = [];
   let skip = 0;
   const count = 100;
+  // Keep this light for Vercel hobby timeouts.
+  const maxPages = strict ? 2 : 3;
 
-  // Paginate through recent payments (source of paid seat holders).
-  for (let page = 0; page < 5; page += 1) {
+  for (let page = 0; page < maxPages; page += 1) {
     const url = `https://api.razorpay.com/v1/payments?count=${count}&skip=${skip}`;
     const response = await fetch(url, {
       headers: { Authorization: header },
@@ -118,67 +152,100 @@ export async function fetchWorkshopRegistrations(options = {}) {
     if (items.length === 0) break;
 
     for (const payment of items) {
-      if (!["captured", "authorized"].includes(payment.status)) continue;
-
-      let notes = payment.notes || {};
-      let orderId = payment.order_id || "";
-
-      // Enrich from order notes when payment notes are empty.
-      if (
-        orderId &&
-        (!notes.parent_name || !notes.parent_email || !notes.workshop)
-      ) {
-        try {
-          const orderRes = await fetch(
-            `https://api.razorpay.com/v1/orders/${orderId}`,
-            { headers: { Authorization: header } },
-          );
-          if (orderRes.ok) {
-            const order = await orderRes.json();
-            notes = { ...order.notes, ...notes };
-            orderId = order.id || orderId;
-          }
-        } catch {
-          // keep payment notes only
-        }
-      }
-
+      const notes = normalizeNotes(payment.notes);
       if (notes.workshop && notes.workshop !== WORKSHOP_NOTE) continue;
 
-      if (strict) {
-        if (notes.workshop !== WORKSHOP_NOTE) continue;
-      } else {
-        // If workshop note missing, still include payments that look like ours
-        // (description match) so older test payments aren't totally lost.
-        const desc = String(payment.description || "");
-        if (
-          notes.workshop !== WORKSHOP_NOTE &&
-          !/biomedical|workshop|parent/i.test(desc) &&
-          !notes.parent_name
-        ) {
-          continue;
-        }
+      const statusOk = strict
+        ? ["captured", "authorized"].includes(payment.status)
+        : ["captured", "authorized", "failed"].includes(payment.status);
+      if (!statusOk) continue;
+
+      // Skip obvious non-workshop traffic without an order round-trip.
+      if (!looksLikeWorkshop(payment, notes) && !payment.order_id) continue;
+      if (
+        !looksLikeWorkshop(payment, notes) &&
+        !WORKSHOP_AMOUNTS_PAISE.has(Number(payment.amount)) &&
+        notes.workshop !== WORKSHOP_NOTE
+      ) {
+        continue;
       }
 
-      registrations.push({
-        id: payment.id,
-        orderId,
-        name: notes.parent_name || notes.name || "—",
-        email: notes.parent_email || notes.email || "—",
-        mobile: notes.parent_mobile || notes.contact || payment.contact || "—",
-        amountInr: (payment.amount || 0) / 100,
-        currency: payment.currency || "INR",
-        status: payment.status,
-        method: payment.method || "—",
-        paidAt: payment.created_at
-          ? new Date(payment.created_at * 1000).toISOString()
-          : null,
-      });
+      candidates.push(payment);
     }
 
     if (items.length < count) break;
     skip += count;
   }
+
+  const enriched = await mapPool(candidates, 8, async (payment) => {
+    let notes = normalizeNotes(payment.notes);
+    let orderId = payment.order_id || "";
+
+    const needsOrder =
+      orderId &&
+      (notes.workshop !== WORKSHOP_NOTE ||
+        !notes.parent_name ||
+        !notes.parent_email);
+
+    if (needsOrder && looksLikeWorkshop(payment, notes)) {
+      try {
+        const orderRes = await fetch(
+          `https://api.razorpay.com/v1/orders/${orderId}`,
+          { headers: { Authorization: header } },
+        );
+        if (orderRes.ok) {
+          const order = await orderRes.json();
+          notes = { ...normalizeNotes(order.notes), ...notes };
+          orderId = order.id || orderId;
+        }
+      } catch {
+        // keep payment notes only
+      }
+    } else if (
+      needsOrder &&
+      WORKSHOP_AMOUNTS_PAISE.has(Number(payment.amount))
+    ) {
+      try {
+        const orderRes = await fetch(
+          `https://api.razorpay.com/v1/orders/${orderId}`,
+          { headers: { Authorization: header } },
+        );
+        if (orderRes.ok) {
+          const order = await orderRes.json();
+          notes = { ...normalizeNotes(order.notes), ...notes };
+          orderId = order.id || orderId;
+        }
+      } catch {
+        // keep payment notes only
+      }
+    }
+
+    if (notes.workshop && notes.workshop !== WORKSHOP_NOTE) return null;
+
+    if (strict) {
+      if (notes.workshop !== WORKSHOP_NOTE) return null;
+      if (!["captured", "authorized"].includes(payment.status)) return null;
+    } else if (!looksLikeWorkshop(payment, notes)) {
+      return null;
+    }
+
+    return {
+      id: payment.id,
+      orderId,
+      name: notes.parent_name || notes.name || "—",
+      email: notes.parent_email || notes.email || "—",
+      mobile: notes.parent_mobile || notes.contact || payment.contact || "—",
+      amountInr: (payment.amount || 0) / 100,
+      currency: payment.currency || "INR",
+      status: payment.status,
+      method: payment.method || "—",
+      paidAt: payment.created_at
+        ? new Date(payment.created_at * 1000).toISOString()
+        : null,
+    };
+  });
+
+  const registrations = enriched.filter(Boolean);
 
   registrations.sort((a, b) => {
     const ta = a.paidAt ? Date.parse(a.paidAt) : 0;
@@ -192,8 +259,6 @@ export async function fetchWorkshopRegistrations(options = {}) {
 /**
  * Live seat inventory.
  * remaining = SEATS_REMAINING_START − successful workshop payments (after baseline).
- * If Razorpay already has N workshop payments and you still want to show 29,
- * set SEATS_PAID_BASELINE=N (or set SEATS_REMAINING_START to 29 + N).
  */
 export async function getSeatAvailability() {
   const total = Number(process.env.SEATS_TOTAL || "40");

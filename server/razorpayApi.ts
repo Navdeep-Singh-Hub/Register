@@ -154,12 +154,16 @@ function attachApi(middlewares: Connect.Server, env: RazorpayEnv & Record<string
           return;
         }
         const registrations = await fetchWorkshopRegistrations();
-        const revenue = registrations.reduce(
+        const paid = registrations.filter((r: { status?: string }) =>
+          ["captured", "authorized"].includes(r.status || ""),
+        );
+        const revenue = paid.reduce(
           (sum: number, r: { amountInr?: number }) => sum + (r.amountInr || 0),
           0,
         );
         json(res, 200, {
-          count: registrations.length,
+          count: paid.length,
+          failedCount: registrations.length - paid.length,
           revenue,
           registrations,
           fetchedAt: new Date().toISOString(),

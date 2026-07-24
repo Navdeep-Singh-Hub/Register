@@ -19,10 +19,14 @@ export default async function handler(req, res) {
     }
 
     const registrations = await fetchWorkshopRegistrations();
-    const revenue = registrations.reduce((sum, r) => sum + (r.amountInr || 0), 0);
+    const paid = registrations.filter((r) =>
+      ["captured", "authorized"].includes(r.status),
+    );
+    const revenue = paid.reduce((sum, r) => sum + (r.amountInr || 0), 0);
 
     return res.status(200).json({
-      count: registrations.length,
+      count: paid.length,
+      failedCount: registrations.length - paid.length,
       revenue,
       registrations,
       fetchedAt: new Date().toISOString(),
