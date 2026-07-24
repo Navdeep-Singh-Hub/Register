@@ -9,7 +9,9 @@ function readCredentials() {
     ""
   ).trim();
   const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
-  const amountInr = Number(process.env.WORKSHOP_FEE_INR || "499");
+  // Must match src/config.ts feeInr. Treat legacy Vercel value 1499 as 499.
+  const fromEnv = (process.env.WORKSHOP_FEE_INR || "499").trim();
+  const amountInr = Number(fromEnv === "1499" ? "499" : fromEnv);
 
   if (!keyId || !keySecret) {
     throw new Error(

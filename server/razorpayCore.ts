@@ -31,7 +31,9 @@ export function readRazorpayEnv(
     ""
   ).trim();
   const keySecret = (source.RAZORPAY_KEY_SECRET || "").trim();
-  const amountInr = Number(source.WORKSHOP_FEE_INR || "499");
+  // Must match src/config.ts feeInr. Treat legacy Vercel value 1499 as 499.
+  const fromEnv = String(source.WORKSHOP_FEE_INR || "499").trim();
+  const amountInr = Number(fromEnv === "1499" ? "499" : fromEnv);
 
   if (!keyId || !keySecret) {
     throw new Error(
