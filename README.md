@@ -28,7 +28,7 @@ cp .env.example .env
 ```env
 VITE_RAZORPAY_KEY_ID=rzp_live_xxxxxxxxxxxx
 RAZORPAY_KEY_SECRET=your_secret_here
-WORKSHOP_FEE_INR=1499
+WORKSHOP_FEE_INR=499
 ```
 
 5. Restart `npm run dev`
@@ -45,6 +45,7 @@ Local `npm run dev` uses the Vite API plugin. Production uses Vercel serverless 
 
 - `api/create-order.js` → `POST /api/create-order`
 - `api/verify-payment.js` → `POST /api/verify-payment`
+- `api/seats.js` → `GET /api/seats` (live remaining seats)
 - `api/admin/login.js` → `POST /api/admin/login`
 - `api/admin/registrations.js` → `GET /api/admin/registrations`
 
@@ -54,7 +55,10 @@ In **Vercel → Project → Settings → Environment Variables**, add for Produc
 |------|--------|
 | `VITE_RAZORPAY_KEY_ID` | Public Key Id (`rzp_live_…` or `rzp_test_…`) |
 | `RAZORPAY_KEY_SECRET` | Secret — never expose to the browser |
-| `WORKSHOP_FEE_INR` | e.g. `1499` |
+| `WORKSHOP_FEE_INR` | e.g. `499` |
+| `SEATS_TOTAL` | Total seats (default `40`) |
+| `SEATS_REMAINING_START` | Opening remaining before paid regs (default `29`) |
+| `SEATS_PAID_BASELINE` | Optional: ignore N existing Razorpay workshop payments |
 | `ADMIN_PASSWORD` | Password for `/admin` |
 | `ADMIN_SECRET` | Optional token signing secret |
 | `VITE_META_PIXEL_ID` | Optional |

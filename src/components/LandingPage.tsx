@@ -42,7 +42,6 @@ import {
   IconStethoscope,
   IconUsers,
   IconUtensils,
-  IconWhatsApp,
   IconXCircle,
 } from "./Icons";
 
@@ -313,10 +312,12 @@ function scrollToPricing() {
 
 function ExpertAvatar({
   name,
+  photo,
   className = "",
   size,
 }: {
   name: string;
+  photo?: string;
   className?: string;
   size?: number;
 }) {
@@ -333,26 +334,30 @@ function ExpertAvatar({
       aria-hidden
       style={size ? { width: size, height: size } : undefined}
     >
-      <svg viewBox="0 0 64 64" width="100%" height="100%">
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#c8e8df" />
-            <stop offset="100%" stopColor="#b7d7e4" />
-          </linearGradient>
-        </defs>
-        <rect width="64" height="64" fill={`url(#${gradientId})`} />
-        <text
-          x="32"
-          y="38"
-          textAnchor="middle"
-          fontFamily="Outfit, sans-serif"
-          fontSize="18"
-          fontWeight="600"
-          fill="#0a4f44"
-        >
-          {initials}
-        </text>
-      </svg>
+      {photo ? (
+        <img src={photo} alt="" width={size ?? 88} height={size ?? 88} />
+      ) : (
+        <svg viewBox="0 0 64 64" width="100%" height="100%">
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#c8e8df" />
+              <stop offset="100%" stopColor="#b7d7e4" />
+            </linearGradient>
+          </defs>
+          <rect width="64" height="64" fill={`url(#${gradientId})`} />
+          <text
+            x="32"
+            y="38"
+            textAnchor="middle"
+            fontFamily="Outfit, sans-serif"
+            fontSize="18"
+            fontWeight="600"
+            fill="#0a4f44"
+          >
+            {initials}
+          </text>
+        </svg>
+      )}
     </div>
   );
 }
@@ -631,6 +636,8 @@ export function LandingPage({
   onPaid: (paymentId: string) => void;
 }) {
   const [showSticky, setShowSticky] = useState(false);
+  const [seatsRemaining, setSeatsRemaining] = useState(workshop.seatsRemaining);
+  const [seatsTotal, setSeatsTotal] = useState(workshop.seatsTotal);
   const heroRef = useRef<HTMLElement>(null);
 
   const { scrollYProgress: heroProgress } = useScroll({
@@ -640,6 +647,29 @@ export function LandingPage({
   const copyY = useTransform(heroProgress, [0, 1], [0, 90]);
   const copyOpacity = useTransform(heroProgress, [0, 0.85], [1, 0.15]);
   const visualY = useTransform(heroProgress, [0, 1], [0, 150]);
+
+  async function refreshSeats() {
+    try {
+      const res = await fetch("/api/seats");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        remaining?: number;
+        total?: number;
+      };
+      if (typeof data.remaining === "number" && Number.isFinite(data.remaining)) {
+        setSeatsRemaining(Math.max(0, data.remaining));
+      }
+      if (typeof data.total === "number" && Number.isFinite(data.total) && data.total > 0) {
+        setSeatsTotal(data.total);
+      }
+    } catch {
+      // Keep configured defaults if the seats API is unavailable.
+    }
+  }
+
+  useEffect(() => {
+    void refreshSeats();
+  }, []);
 
   useEffect(() => {
     const pricing = document.getElementById("pricing");
@@ -660,7 +690,11 @@ export function LandingPage({
     return () => document.body.classList.remove("has-sticky-cta");
   }, [showSticky]);
 
-  const whatsappHref = `https://wa.me/${workshop.whatsappNumber}?text=${encodeURIComponent(workshop.whatsappMessage)}`;
+  function handlePaid(paymentId: string) {
+    setSeatsRemaining((n) => Math.max(0, n - 1));
+    void refreshSeats();
+    onPaid(paymentId);
+  }
 
   return (
     <>
@@ -708,7 +742,10 @@ export function LandingPage({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.65, ease: EASE }}
               >
-                <ExpertAvatar name={workshop.experts.priyanka.name} />
+                <ExpertAvatar
+                  name={workshop.experts.priyanka.name}
+                  photo={workshop.experts.priyanka.photo}
+                />
                 <ExpertAvatar
                   name={workshop.experts.neha.name}
                   className="secondary"
@@ -741,7 +778,7 @@ export function LandingPage({
                   {
                     Icon: IconUsers,
                     label: "Seats",
-                    value: `${workshop.seatsRemaining} of ${workshop.seatsTotal} left`,
+                    value: `${seatsRemaining} of ${seatsTotal} seats`,
                   },
                 ].map(({ Icon, label, value }) => (
                   <motion.div
@@ -888,6 +925,7 @@ export function LandingPage({
                       <div className="expert-top">
                         <ExpertAvatar
                           name={expert.name}
+                          photo={"photo" in expert ? expert.photo : undefined}
                           className="expert-photo"
                           size={88}
                         />
@@ -995,7 +1033,7 @@ export function LandingPage({
           </div>
         </RevealSection>
 
-        <PricingForm onPaid={onPaid} />
+        <PricingForm onPaid={handlePaid} />
       </main>
 
       <footer className="site-footer">
@@ -1004,21 +1042,6 @@ export function LandingPage({
           <p>Educational workshop. Not a substitute for personal medical care.</p>
         </div>
       </footer>
-
-      <motion.a
-        className="whatsapp-float"
-        href={whatsappHref}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Ask a workshop question on WhatsApp"
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 1.4, type: "spring", stiffness: 260, damping: 18 }}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.94 }}
-      >
-        <IconWhatsApp />
-      </motion.a>
 
       <AnimatePresence>
         {showSticky && (

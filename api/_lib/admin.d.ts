@@ -27,4 +27,13 @@ export type RegistrationRow = {
   paidAt: string | null;
 };
 
-export function fetchWorkshopRegistrations(): Promise<RegistrationRow[]>;
+export function fetchWorkshopRegistrations(options?: {
+  strict?: boolean;
+}): Promise<RegistrationRow[]>;
+
+export function getSeatAvailability(): Promise<{
+  total: number;
+  remaining: number;
+  paid: number;
+  sold: number;
+}>;

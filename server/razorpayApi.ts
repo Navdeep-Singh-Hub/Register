@@ -10,6 +10,7 @@ import {
   createAdminToken,
   fetchWorkshopRegistrations,
   getAdminPassword,
+  getSeatAvailability,
   passwordsMatch,
   verifyAdminToken,
 } from "../api/_lib/admin.js";
@@ -95,6 +96,26 @@ function attachApi(middlewares: Connect.Server, env: RazorpayEnv & Record<string
       } catch (error) {
         json(res, 500, {
           error: error instanceof Error ? error.message : "Verification failed",
+        });
+      }
+      return;
+    }
+
+    if (url === "/api/seats" && req.method === "GET") {
+      try {
+        const seats = await getSeatAvailability();
+        json(res, 200, seats);
+      } catch (error) {
+        const total = Number(process.env.SEATS_TOTAL || "40");
+        const remaining = Number(process.env.SEATS_REMAINING_START || "29");
+        json(res, 200, {
+          total: Number.isFinite(total) ? total : 40,
+          remaining: Number.isFinite(remaining) ? remaining : 29,
+          paid: 0,
+          sold: 0,
+          fallback: true,
+          error:
+            error instanceof Error ? error.message : "Could not load seats",
         });
       }
       return;

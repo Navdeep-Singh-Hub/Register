@@ -9,7 +9,7 @@ function readCredentials() {
     ""
   ).trim();
   const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
-  const amountInr = Number(process.env.WORKSHOP_FEE_INR || "1499");
+  const amountInr = Number(process.env.WORKSHOP_FEE_INR || "499");
 
   if (!keyId || !keySecret) {
     throw new Error(

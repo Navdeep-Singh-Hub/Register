@@ -490,6 +490,14 @@ p {
   background: var(--brand-soft);
 }
 
+.expert-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+
 .hero-experts .expert-avatar.secondary {
   width: 2.5rem;
   height: 2.5rem;

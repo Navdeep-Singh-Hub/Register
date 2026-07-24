@@ -88,7 +88,13 @@ export function bearerToken(req) {
   return token.trim();
 }
 
-export async function fetchWorkshopRegistrations() {
+/**
+ * @param {{ strict?: boolean }} [options]
+ * When strict is true, only payments with notes.workshop matching this event count
+ * (used for the public seat counter so unrelated payments don't eat seats).
+ */
+export async function fetchWorkshopRegistrations(options = {}) {
+  const strict = options.strict === true;
   const { header } = razorpayAuthHeader();
   const registrations = [];
   let skip = 0;
@@ -138,15 +144,20 @@ export async function fetchWorkshopRegistrations() {
       }
 
       if (notes.workshop && notes.workshop !== WORKSHOP_NOTE) continue;
-      // If workshop note missing, still include payments that look like ours
-      // (description match) so older test payments aren't totally lost.
-      const desc = String(payment.description || "");
-      if (
-        notes.workshop !== WORKSHOP_NOTE &&
-        !/biomedical|workshop|parent/i.test(desc) &&
-        !notes.parent_name
-      ) {
-        continue;
+
+      if (strict) {
+        if (notes.workshop !== WORKSHOP_NOTE) continue;
+      } else {
+        // If workshop note missing, still include payments that look like ours
+        // (description match) so older test payments aren't totally lost.
+        const desc = String(payment.description || "");
+        if (
+          notes.workshop !== WORKSHOP_NOTE &&
+          !/biomedical|workshop|parent/i.test(desc) &&
+          !notes.parent_name
+        ) {
+          continue;
+        }
       }
 
       registrations.push({
@@ -176,4 +187,30 @@ export async function fetchWorkshopRegistrations() {
   });
 
   return registrations;
+}
+
+/**
+ * Live seat inventory.
+ * remaining = SEATS_REMAINING_START − successful workshop payments (after baseline).
+ * If Razorpay already has N workshop payments and you still want to show 29,
+ * set SEATS_PAID_BASELINE=N (or set SEATS_REMAINING_START to 29 + N).
+ */
+export async function getSeatAvailability() {
+  const total = Number(process.env.SEATS_TOTAL || "40");
+  const startRemaining = Number(process.env.SEATS_REMAINING_START || "29");
+  const paidBaseline = Number(process.env.SEATS_PAID_BASELINE || "0");
+  const registrations = await fetchWorkshopRegistrations({ strict: true });
+  const paid = Math.max(
+    0,
+    registrations.length - (Number.isFinite(paidBaseline) ? paidBaseline : 0),
+  );
+  const remaining = Math.max(0, startRemaining - paid);
+  const safeTotal = Number.isFinite(total) && total > 0 ? total : 40;
+
+  return {
+    total: safeTotal,
+    remaining,
+    paid,
+    sold: Math.max(0, safeTotal - remaining),
+  };
 }

@@ -12,11 +12,12 @@ export const workshop = {
   duration: "2 Hours",
   venue: "Online (Zoom)",
   seatsTotal: 40,
-  seatsRemaining: 12,
+  /** Opening remaining seats before live Razorpay payments are subtracted */
+  seatsRemaining: 29,
   registrationClosesAt: "2026-08-14T23:59:59+05:30",
 
-  feeInr: 1499,
-  feeDisplay: "₹1,499",
+  feeInr: 499,
+  feeDisplay: "₹499",
 
   razorpayKeyId: import.meta.env.VITE_RAZORPAY_KEY_ID ?? "rzp_test_xxxxxxxx",
   whatsappNumber: "919876543210",
@@ -32,6 +33,7 @@ export const workshop = {
       credentials: "MD, DNB Psychiatry",
       role: "Child & Adolescent Psychiatrist",
       title: "Founder, Global Child Wellness Centre",
+      photo: "/experts/dr-priyanka-kalra.png",
       interests: [
         "Autism",
         "ADHD",
@@ -41,17 +43,17 @@ export const workshop = {
       bio: "Dr. Priyanka Kalra brings clinical depth and parent-centred care to every session, helping families understand when medical factors may be influencing development.",
     },
     neha: {
-      name: "Dr. Neha",
-      credentials: "MBBS, MD (Paediatrics)",
-      role: "Paediatrician & Developmental Care",
-      title: "Faculty, Global Child Wellness Centre",
+      name: "Dr. Neha Goyal",
+      credentials: "MD Psychiatry",
+      role: "Child & Adolescent Psychiatrist",
+      title: "Goyal Hospital",
       interests: [
-        "Developmental paediatrics",
-        "Nutrition",
-        "Gut health",
-        "Sleep medicine",
+        "Developmental disorders",
+        "Behavioural concerns",
+        "Child psychology",
+        "Parent guidance",
       ],
-      bio: "Dr. Neha focuses on the medical and nutritional foundations that support therapy outcomes—helping parents connect sleep, gut health, and feeding patterns to behaviour and learning.",
+      bio: "Dr. Neha Goyal, MD (Psychiatry), is a compassionate Child & Adolescent Psychiatrist with over 14 years of clinical experience in diagnosing and treating developmental, behavioral, and emotional disorders in children and adolescents. She completed her MD in Psychiatry from Dayanand Medical College, Ludhiana, and also holds a Diploma in Child Psychology.",
     },
   },
 
