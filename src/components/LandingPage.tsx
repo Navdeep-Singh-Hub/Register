@@ -636,8 +636,10 @@ export function LandingPage({
   onPaid: (paymentId: string) => void;
 }) {
   const [showSticky, setShowSticky] = useState(false);
-  const [seatsRemaining, setSeatsRemaining] = useState(workshop.seatsRemaining);
-  const [seatsTotal, setSeatsTotal] = useState(workshop.seatsTotal);
+  const [seatsRemaining, setSeatsRemaining] = useState<number>(
+    workshop.seatsRemaining,
+  );
+  const [seatsTotal, setSeatsTotal] = useState<number>(workshop.seatsTotal);
   const heroRef = useRef<HTMLElement>(null);
 
   const { scrollYProgress: heroProgress } = useScroll({
