@@ -14,6 +14,7 @@ export type Registration = {
   currency: string;
   status: string;
   method: string;
+  errorDescription?: string;
   paidAt: string | null;
 };
 
@@ -369,6 +370,9 @@ function AdminDashboard({
                         <span className={`admin-pill ${row.status}`}>
                           {row.status}
                         </span>
+                        {row.errorDescription ? (
+                          <span className="muted">{row.errorDescription}</span>
+                        ) : null}
                       </td>
                       <td>{formatDate(row.paidAt)}</td>
                       <td className="mono">{row.id}</td>

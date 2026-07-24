@@ -24,6 +24,7 @@ export type RegistrationRow = {
   currency: string;
   status: string;
   method: string;
+  errorDescription?: string;
   paidAt: string | null;
 };
 

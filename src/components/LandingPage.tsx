@@ -491,11 +491,15 @@ function PricingForm({ onPaid }: { onPaid: (paymentId: string) => void }) {
     setError("");
 
     const trimmedName = name.trim();
-    const trimmedMobile = mobile.replace(/\s+/g, "");
+    const trimmedMobile = mobile.replace(/\D/g, "");
     const trimmedEmail = email.trim();
 
     if (!trimmedName || !trimmedMobile || !trimmedEmail) {
       setError("Please fill in parent name, mobile number, and email.");
+      return;
+    }
+    if (trimmedMobile.length !== 10) {
+      setError("Mobile number must be exactly 10 digits.");
       return;
     }
     if (!/^[6-9]\d{9}$/.test(trimmedMobile)) {
@@ -581,7 +585,12 @@ function PricingForm({ onPaid }: { onPaid: (paymentId: string) => void }) {
                   inputMode="numeric"
                   autoComplete="tel"
                   value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
+                  maxLength={10}
+                  pattern="[6-9][0-9]{9}"
+                  title="Enter a 10-digit mobile number"
+                  onChange={(e) =>
+                    setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                  }
                   placeholder="10-digit mobile"
                 />
               </label>

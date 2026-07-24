@@ -239,6 +239,7 @@ export async function fetchWorkshopRegistrations(options = {}) {
       currency: payment.currency || "INR",
       status: payment.status,
       method: payment.method || "—",
+      errorDescription: payment.error_description || payment.error_reason || "",
       paidAt: payment.created_at
         ? new Date(payment.created_at * 1000).toISOString()
         : null,
